@@ -1,0 +1,63 @@
+
+// impl<'tr> Shl<&[f64]> for &mut TomlOptMut<'tr>
+// {
+//     type Output = Self;
+//     fn shl(self, rhs: &[f64]) -> Self::Output {
+//         if let Some(ref mut v) = self.valop {
+//             for item in rhs {
+//                 match v {
+//                     Value::Array(arr) => { arr.push(Value::from(*item)); },
+//                     _ => {}
+//                 }
+//             }
+//         }
+//         self
+//     }
+// }
+
+/*
+impl<'tr> ShlAssign<&str> for TomlOptMut<'tr>
+{
+    fn shl_assign(&mut self, rhs: &str) {
+        if let Some(ref mut v) = self.valop {
+            **v = Value::String(rhs.to_string());
+        }
+    }
+}
+
+impl<'tr> ShlAssign<String> for TomlOptMut<'tr>
+{
+    fn shl_assign(&mut self, rhs: String) {
+        if let Some(ref mut v) = self.valop {
+            **v = Value::String(rhs);
+        }
+    }
+}
+
+impl<'tr> ShlAssign<i64> for TomlOptMut<'tr>
+{
+    fn shl_assign(&mut self, rhs: i64) {
+        if let Some(ref mut v) = self.valop {
+            **v = Value::Integer(rhs);
+        }
+    }
+}
+
+impl<'tr> ShlAssign<f64> for TomlOptMut<'tr>
+{
+    fn shl_assign(&mut self, rhs: f64) {
+        if let Some(ref mut v) = self.valop {
+            **v = Value::Float(rhs);
+        }
+    }
+}
+
+impl<'tr> ShlAssign<bool> for TomlOptMut<'tr>
+{
+    fn shl_assign(&mut self, rhs: bool) {
+        if let Some(ref mut v) = self.valop {
+            **v = Value::Boolean(rhs);
+        }
+    }
+}
+*/

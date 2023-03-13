@@ -1,0 +1,16 @@
+# This sample.tmol is used by example/tests with `include_str` macro.
+ip = "127.0.0.1"
+[host]
+ip = "127.0.1.1"
+port = 8080
+protocol = ["tcp", "udp", "mmp"]
+[[service]]
+name = "serv_1"
+desc = "first server"
+[[service]]
+name = "serv_2"
+desc = "another server"
+[misc]
+int = 1234
+float = 3.14
+bool = true

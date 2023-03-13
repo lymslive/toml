@@ -1,0 +1,22 @@
+[package]
+name = "toml_ops"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["toml", "operator"]
+categories = ["parsing", "config"]
+description = """
+Implement Toml pointer following the json path syntax, with type Option<&toml::Value>.
+Overload / as path operator to point into a node in toml tree, as well as some other
+meaningfull operator overload. 
+"""
+authors = ["lymslive <lymslive@qq.com>"]
+repository = "https://github.com/lymslive/toml"
+homepage = "https://github.com/lymslive/toml"
+documentation = "https://docs.rs/toml_ops"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+toml = "0.7.2"
