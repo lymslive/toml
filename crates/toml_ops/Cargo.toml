@@ -19,4 +19,4 @@ documentation = "https://docs.rs/toml_ops"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-toml = "0.7.2"
+toml = { version = "0.7.2", path = "../toml" }
