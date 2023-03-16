@@ -1,4 +1,7 @@
-use super::*;
+use toml::Value;
+use toml_ops::PathOperator;
+use toml_ops::TomlPtr;
+//use toml_ops::TomlPtrMut;
 
 fn load_test_toml() -> Value
 {
@@ -14,19 +17,19 @@ fn path_test() {
 
     let op = TomlPtr::from(&v);
     let ip = op / "ip";
-    assert_eq!(ip.valop.unwrap().as_str(), Some("127.0.0.1"));
+    assert_eq!(ip.unwrap().as_str(), Some("127.0.0.1"));
 
     let ip = op / "host" / "ip";
-    assert_eq!(ip.valop.unwrap().as_str(), Some("127.0.1.1"));
+    assert_eq!(ip.unwrap().as_str(), Some("127.0.1.1"));
 
     let host = TomlPtr::from(&v) / "host";
     let ip = host / "ip";
-    assert_eq!(ip.valop.unwrap().as_str(), Some("127.0.1.1"));
+    assert_eq!(ip.unwrap().as_str(), Some("127.0.1.1"));
     let port = host / "port";
-    assert_eq!(port.valop.unwrap().as_integer(), Some(8080));
+    assert_eq!(port.unwrap().as_integer(), Some(8080));
 
     let proto = host / "protocol" / 1;
-    assert_eq!(proto.valop.unwrap().as_str(), Some("udp"));
+    assert_eq!(proto.unwrap().as_str(), Some("udp"));
 
     let proto = v.path() / "host" / "protocol" / 2;
     assert_eq!(proto.unwrap().as_str(), Some("mmp"));
@@ -110,49 +113,6 @@ fn path_mut_test() {
     assert_eq!(node.is_none(), true);
     assert_eq!(node.is_none(), true);
     assert_eq!(!node, true);
-}
-
-#[test]
-fn path_build_test() {
-    let pseg = "".build_path();
-    dbg!(&pseg.paths);
-    assert_eq!(pseg.paths.is_empty(), false);
-    assert_eq!(pseg.paths, vec![""]);
-
-    let pseg = "/".build_path();
-    dbg!(&pseg.paths);
-    assert_eq!(pseg.paths.is_empty(), false);
-    assert_eq!(pseg.paths, vec!["", ""]);
-
-    let pseg = "//".build_path();
-    assert_eq!(pseg.paths, vec!["", "", ""]);
-
-    let pseg = "/path/to/leaf".build_path();
-    assert_eq!(pseg.paths, vec!["", "path", "to", "leaf"]);
-
-    let pseg = "path/to/leaf".build_path();
-    assert_eq!(pseg.paths, vec!["path", "to", "leaf"]);
-
-    let pseg = "path/to//leaf".build_path();
-    assert_eq!(pseg.paths, vec!["path", "to", "", "leaf"]);
-
-    let pseg = "path.to.leaf".build_path();
-    assert_eq!(pseg.paths, vec!["path", "to", "leaf"]);
-
-    let pseg = "path/to.leaf".build_path();
-    assert_eq!(pseg.paths, vec!["path", "to", "leaf"]);
-
-    let pseg = "path/to.leaf/".build_path();
-    assert_eq!(pseg.paths, vec!["path", "to", "leaf", ""]);
-
-    let path = "34ab";
-    let index = path.parse::<usize>();
-    assert_eq!(index.is_ok(), false);
-
-    let path = "34";
-    let index = path.parse::<usize>();
-    assert_eq!(index.is_ok(), true);
-    assert_eq!(index, Ok(34));
 }
 
 #[test]
