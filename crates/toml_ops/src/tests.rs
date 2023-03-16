@@ -10,17 +10,16 @@ fn load_test_toml() -> Value
 #[test]
 fn path_test() {
     let v = load_test_toml();
-    assert_eq!(path(Some(&v), "ip").unwrap().as_str(), Some("127.0.0.1"));
     assert_eq!(v["ip"].as_str(), Some("127.0.0.1"));
 
-    let op = TomlPtr::path(&v);
+    let op = TomlPtr::from(&v);
     let ip = op / "ip";
     assert_eq!(ip.valop.unwrap().as_str(), Some("127.0.0.1"));
 
     let ip = op / "host" / "ip";
     assert_eq!(ip.valop.unwrap().as_str(), Some("127.0.1.1"));
 
-    let host = TomlPtr::path(&v) / "host";
+    let host = TomlPtr::from(&v) / "host";
     let ip = host / "ip";
     assert_eq!(ip.valop.unwrap().as_str(), Some("127.0.1.1"));
     let port = host / "port";
@@ -33,22 +32,22 @@ fn path_test() {
     assert_eq!(proto.unwrap().as_str(), Some("mmp"));
 
     let proto = v.path() / "host/protocol/2";
-    assert_eq!(proto.unpath().unwrap().as_str(), Some("mmp"));
+    assert_eq!(proto.unwrap().as_str(), Some("mmp"));
 
     let proto = v.pathto("/host/protocol/2");
-    assert_eq!(proto.unpath().unwrap().as_str(), Some("mmp"));
+    assert_eq!(proto.unwrap().as_str(), Some("mmp"));
 
     let server = v.path() / "service" / 0 / "name";
-    assert_eq!(server.unpath().unwrap().as_str(), Some("serv_1"));
+    assert_eq!(server.unwrap().as_str(), Some("serv_1"));
 
     // path() produce immutable reference, cannot write or assign
-    // let server = server.unpath().unwrap();
+    // let server = server.unwrap();
     // *server = Value::String(String::from("serv 1"));
 
     let mut mv = load_test_toml();
     let ip = mv.get_mut("ip").unwrap();
     *ip = Value::String(String::from("127.0.0.2"));
-    assert_eq!((mv.path() / "ip").unpath().unwrap().as_str(), Some("127.0.0.2"));
+    assert_eq!((mv.path() / "ip").unwrap().as_str(), Some("127.0.0.2"));
 }
 
 #[test]
@@ -56,31 +55,31 @@ fn path_none_test() {
     let v = load_test_toml();
 
     let root = v.path();
-    assert_eq!(root.unpath().is_none(), false);
+    assert_eq!(root.is_none(), false);
     assert_eq!(!root, false);
 
     let node = root / "ip";
-    assert_eq!(node.unpath().is_none(), false);
+    assert_eq!(node.is_none(), false);
     assert_eq!(!node, false);
     let node = root / "IP";
-    assert_eq!(node.unpath().is_none(), true);
+    assert_eq!(node.is_none(), true);
     assert_eq!(!node, true);
 
     let node = root / "host" /"protocol";
-    assert_eq!(node.unpath().is_none(), false);
+    assert_eq!(node.is_none(), false);
     let node = root / "host" /"protocol" / 1;
-    assert_eq!(node.unpath().is_none(), false);
+    assert_eq!(node.is_none(), false);
     let node = root / "host" /"protocol" / 3;
-    assert_eq!(node.unpath().is_none(), true);
+    assert_eq!(node.is_none(), true);
 
     let node = root / "service" / 0;
-    assert_eq!(node.unpath().is_none(), false);
+    assert_eq!(node.is_none(), false);
     let node = root / "service" / 0 / "description";
-    assert_eq!(node.unpath().is_none(), true);
+    assert_eq!(node.is_none(), true);
     let node = root / "service" / 0 / "desc";
-    assert_eq!(node.unpath().is_none(), false);
+    assert_eq!(node.is_none(), false);
     let node = root / "service" / 2;
-    assert_eq!(node.unpath().is_none(), true);
+    assert_eq!(node.is_none(), true);
 }
 
 
@@ -89,26 +88,26 @@ fn path_mut_test() {
     let mut v = load_test_toml();
 
     let root = v.path();
-    assert_eq!(root.unpath().is_none(), false);
+    assert_eq!(root.is_none(), false);
     assert_eq!(!root, false);
 
     let node = root / "ip";
-    assert_eq!(node.unpath().is_none(), false);
+    assert_eq!(node.is_none(), false);
     assert_eq!(!node, false);
     assert_eq!(!!node, true);
     assert_eq!(node.is_none(), false);
 
     let node = root / "IP";
-    assert_eq!(node.unpath().is_none(), true);
+    assert_eq!(node.is_none(), true);
     assert_eq!(!node, true);
     assert_eq!((*node).is_none(), true);
 
     let node = v.path_mut() / "ip";
-    assert_eq!(node.unpath().is_none(), false);
+    assert_eq!(node.is_none(), false);
     assert_eq!(!node, false);
 
     let node = v.path_mut() / "IP";
-    assert_eq!(node.unpath().is_none(), true);
+    assert_eq!(node.is_none(), true);
     assert_eq!(node.is_none(), true);
     assert_eq!(!node, true);
 }
@@ -296,7 +295,6 @@ fn push_test() {
     let node = v.path_mut() / "host" / "protocol";
     let node = node << ("abc", ) << ["edf"];
     // enable print by: cargo test -- --nocapture
-    // dbg!(node.unpath());
     let val = node / 3 | "";
     assert_eq!(val, "abc");
     let val = v.path() / "host" / "protocol" / 4 | "";
@@ -306,8 +304,8 @@ fn push_test() {
     let node = v.path_mut() / "host" / "protocol";
     let _ = node << &["xyz"][..] << &["ABC", "DEF"][..];
     let node = v.path() / "host" / "protocol";
-    println!("{}", node.unpath().unwrap());
-    assert_eq!(node.unpath().unwrap().as_array().unwrap().len(), 8);
+    println!("{}", node.unwrap());
+    assert_eq!(node.unwrap().as_array().unwrap().len(), 8);
 
     // push key-val pair to toml table
     let node = v.path_mut() / "host";
@@ -356,9 +354,9 @@ fn assign_test() {
 
     // cannot create non-existed node with <<=
     let mut port_node = v.path_mut() / "port";
-    assert_eq!(port_node.unpath().is_none(), true);
+    assert_eq!(port_node.is_none(), true);
     port_node <<= 80;
-    assert_eq!(port_node.unpath().is_none(), true);
+    assert_eq!(port_node.is_none(), true);
 
     // <<= can assign any type that support toml::from() method.
     let vecint = vec![1, 2, 3, 4];

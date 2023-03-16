@@ -52,57 +52,6 @@ use toml::Value;
 use toml::value::Index;
 use std::ops::{Div, BitOr, Shl, ShlAssign, Not, Deref, DerefMut};
 
-/// Resolve path into a `toml::Value` tree.
-/// Return `None` if the path if invalid.
-/// Note the input is aslo `Option`, for symmetrical implementation reason.
-fn path<'tr, B>(v: Option<&'tr Value>, p: B) -> Option<&'tr Value>
-where B: PathBuilder + Index + Copy
-{
-    if v.is_none() {
-        return None;
-    }
-
-    let v = v.unwrap();
-    let from_index = v.get(p);
-    if from_index.is_some() {
-        return from_index;
-    }
-
-    let path_segment = p.build_path();
-    if path_segment.paths.len() > 1 {
-        return path_segment.apply(v);
-    }
-
-    return None;
-}
-
-/// Resolve path into a mutable `toml::Value` tree.
-fn path_mut<'tr, B>(v: Option<&'tr mut Value>, p: B) -> Option<&'tr mut Value>
-where B: PathBuilder + Index + Copy
-{
-    if v.is_none() {
-        return None;
-    }
-
-    let v = v.unwrap();
-
-    // Note: use immutable version of get() to determiner path is valid first,
-    // otherwise get_mut() and aplly_mut() would trow E0499 as mut ref twice.
-    let target = v.get(p);
-    if target.is_some() {
-        return v.get_mut(p);
-    }
-    else {
-        let path_segment = p.build_path();
-        if path_segment.paths.len() > 1 {
-            return path_segment.apply_mut(v);
-        }
-        else {
-            return None;
-        }
-    }
-}
-
 /// Path segment break on slash(/) or dot(.).
 /// eg: `table.subtable.key` or `table/subtable/key` or `array/index/key`
 struct PathSegment
@@ -196,7 +145,7 @@ pub trait PathOperator
 impl PathOperator for Value
 {
     fn path<'tr>(&'tr self) -> TomlPtr<'tr> {
-        TomlPtr::path(self)
+        TomlPtr::from(self)
     }
     fn pathto<'tr>(&'tr self, p: &str) -> TomlPtr<'tr> {
         let valop = p.build_path().apply(self);
@@ -204,7 +153,7 @@ impl PathOperator for Value
     }
 
     fn path_mut<'tr>(&'tr mut self) -> TomlPtrMut<'tr> {
-        TomlPtrMut::path(self)
+        TomlPtrMut::from(self)
     }
     fn pathto_mut<'tr>(&'tr mut self, p: &str) -> TomlPtrMut<'tr> {
         let valop = p.build_path().apply_mut(self);
@@ -220,19 +169,37 @@ pub struct TomlPtr<'tr> {
 }
 
 impl<'tr> TomlPtr<'tr> {
-    /// As constructor, to build path operand object from a `toml::Value` node.
-    pub fn path(v: &'tr Value) -> Self {
-        Self { valop: Some(v) }
-    }
-    
-    /// As unwrapper, to get the underling `Option<&toml::Value>`.
-    pub fn unpath(&self) -> &Option<&'tr Value> {
-        &self.valop
+    /// Common constructor
+    pub fn new(valop: Option<&'tr Value>) -> Self {
+        Self { valop }
     }
 
+    /// As constructor, to build path operand object from a `toml::Value` node.
+    pub fn from(v: &'tr Value) -> Self {
+        Self::new(Some(v))
+    }
+    
     /// Construct new null pointer.
     fn none() -> Self {
-        Self { valop: None }
+        Self::new(None)
+    }
+
+    /// Resolve path to sub node.
+    fn path<B>(&self, p: B) -> Self where B: PathBuilder + Index + Copy {
+        if self.is_none() {
+            return Self::none();
+        }
+
+        let v = self.unwrap();
+        let mut target = v.get(p);
+        if target.is_none() {
+            let path_segment = p.build_path();
+            if path_segment.paths.len() > 1 {
+                target = path_segment.apply(v);
+            }
+        }
+
+        return Self::new(target);
     }
 }
 
@@ -240,7 +207,7 @@ impl<'tr> TomlPtr<'tr> {
 impl<'tr> Not for TomlPtr<'tr> {
     type Output = bool;
     fn not(self) -> Self::Output {
-        self.valop.is_none()
+        self.is_none()
     }
 }
 
@@ -249,7 +216,7 @@ impl<'tr> Deref for TomlPtr<'tr>
 {
     type Target = Option<&'tr Value>;
     fn deref(&self) -> &Self::Target {
-        self.unpath()
+        &self.valop
     }
 }
 
@@ -260,7 +227,7 @@ where Rhs: PathBuilder + Index + Copy
 {
     type Output = Self;
     fn div(self, rhs: Rhs) -> Self::Output {
-        TomlPtr { valop: path(self.valop, rhs) }
+        self.path(rhs)
     }
 }
 
@@ -345,14 +312,51 @@ pub struct TomlPtrMut<'tr> {
 }
 
 impl<'tr> TomlPtrMut<'tr> {
-    /// As constructor, to build path operand object from a `toml::Value` node.
-    pub fn path(v: &'tr mut Value) -> Self {
-        Self { valop: Some(v) }
+    /// Common constructor
+    pub fn new(valop: Option<&'tr mut Value>) -> Self {
+        Self { valop }
     }
 
-    /// As unwrapper, to get the underling `Option<&mut toml::Value>`.
-    pub fn unpath(&self) -> &Option<&'tr mut Value> {
-        &self.valop
+    /// As constructor, to build path operand object from a `toml::Value` node.
+    pub fn from(v: &'tr mut Value) -> Self {
+        Self::new(Some(v))
+    }
+
+    /// Construct new null pointer.
+    fn none() -> Self {
+        Self::new(None)
+    }
+
+    /// Cast to immutable toml pointer.
+    fn immut(&mut self) -> TomlPtr<'tr> {
+        match self.take() {
+            Some(v) => TomlPtr::from(v),
+            None => TomlPtr::none(),
+        }
+    }
+
+    /// Resolve path to sub node.
+    fn path<B>(&mut self, p: B) -> Self where B: PathBuilder + Index + Copy {
+        if self.is_none() {
+            return Self::none();
+        }
+
+        let v = self.take().unwrap();
+
+        // Note: use immutable version of get() to determiner path is valid first,
+        // otherwise get_mut() and aplly_mut() would trow E0499 as mut ref twice.
+        let mut target = None;
+        if let Some(_) = v.get(p) {
+            target = v.get_mut(p);
+        }
+        else {
+            let path_segment = p.build_path();
+            if path_segment.paths.len() > 1 {
+                target = path_segment.apply_mut(v);
+            }
+        }
+
+        return Self::new(target);
     }
 
     /// Assign any supported value to toml.
@@ -363,25 +367,12 @@ impl<'tr> TomlPtrMut<'tr> {
         }
     }
 
-    /// Cast to immutable toml pointer.
-    fn immut(&mut self) -> TomlPtr<'tr> {
-        match self.take() {
-            Some(v) => TomlPtr::path(v),
-            None => TomlPtr::none(),
-        }
-    }
-
-    /// Construct new null pointer.
-    fn none() -> Self {
-        Self { valop: None }
-    }
-
     /// Put a value to toml and return pointer to it.
     fn put_val<T>(v: &'tr mut Value, rhs: T) -> Self where
         Value: From<T>
     {
         *v = Value::from(rhs);
-        Self::path(v)
+        Self::from(v)
     }
 
     /// Put value to string toml node pointer, would invalidate it when type mismatch.
@@ -424,7 +415,7 @@ impl<'tr> TomlPtrMut<'tr> {
         match self.take() {
             Some(v) if v.is_table() => {
                 v.as_table_mut().unwrap().insert(key.to_string(), Value::from(val));
-                Self::path(v)
+                Self::from(v)
             }
             _ => Self::none()
         }
@@ -437,7 +428,7 @@ impl<'tr> TomlPtrMut<'tr> {
         match self.take() {
             Some(v) if v.is_array() => {
                 v.as_array_mut().unwrap().push(Value::from(val));
-                Self::path(v)
+                Self::from(v)
             }
             _ => Self::none()
         }
@@ -475,8 +466,9 @@ where Rhs: PathBuilder + Index + Copy
 {
     type Output = Self;
 
-    fn div(self, rhs: Rhs) -> Self::Output {
-        TomlPtrMut { valop: path_mut(self.valop, rhs) }
+    fn div(mut self, rhs: Rhs) -> Self::Output {
+        self.path(rhs)
+        //TomlPtrMut { valop: path_mut(self.valop, rhs) }
     }
 }
 
