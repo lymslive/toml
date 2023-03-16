@@ -30,7 +30,7 @@ fn path_test() {
     assert_eq!(proto.valop.unwrap().as_str(), Some("udp"));
 
     let proto = v.path() / "host" / "protocol" / 2;
-    assert_eq!(proto.unpath().unwrap().as_str(), Some("mmp"));
+    assert_eq!(proto.unwrap().as_str(), Some("mmp"));
 
     let proto = v.path() / "host/protocol/2";
     assert_eq!(proto.unpath().unwrap().as_str(), Some("mmp"));

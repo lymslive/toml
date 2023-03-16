@@ -229,6 +229,11 @@ impl<'tr> TomlPtr<'tr> {
     pub fn unpath(&self) -> &Option<&'tr Value> {
         &self.valop
     }
+
+    /// Construct new null pointer.
+    fn none() -> Self {
+        Self { valop: None }
+    }
 }
 
 /// Overload `!` operator to test the pointer is invalid.
@@ -358,14 +363,22 @@ impl<'tr> TomlPtrMut<'tr> {
         }
     }
 
+    /// Cast to immutable toml pointer.
+    fn immut(&mut self) -> TomlPtr<'tr> {
+        match self.take() {
+            Some(v) => TomlPtr::path(v),
+            None => TomlPtr::none(),
+        }
+    }
+
     /// Construct new null pointer.
     fn none() -> Self {
         Self { valop: None }
     }
 
     /// Put a value to toml and return pointer to it.
-    fn put_val<T>(v: &'tr mut Value, rhs: T) -> Self
-    where Value: From<T>
+    fn put_val<T>(v: &'tr mut Value, rhs: T) -> Self where
+        Value: From<T>
     {
         *v = Value::from(rhs);
         Self::path(v)
@@ -374,80 +387,60 @@ impl<'tr> TomlPtrMut<'tr> {
     /// Put value to string toml node pointer, would invalidate it when type mismatch.
     /// Implement for << String and << &str.
     fn put_string(&mut self, rhs: String) -> Self {
-        if self.valop.is_none() {
-            return Self::none();
+        match self.take() {
+            Some(v) if v.is_str() => Self::put_val(v, rhs),
+            _ => Self::none()
         }
-        let v = self.valop.take().unwrap();
-        if v.is_str() {
-            return Self::put_val(v, rhs);
-        }
-        return Self::none();
     }
 
     /// Implement for << i64.
     fn put_integer(&mut self, rhs: i64) -> Self {
-        if self.valop.is_none() {
-            return Self::none();
+        match self.take() {
+            Some(v) if v.is_integer() => Self::put_val(v, rhs),
+                _ => Self::none()
         }
-        let v = self.valop.take().unwrap();
-        if v.is_integer() {
-            return Self::put_val(v, rhs);
-        }
-        return Self::none();
     }
 
     /// Implement for << f64.
     fn put_float(&mut self, rhs: f64) -> Self {
-        if self.valop.is_none() {
-            return Self::none();
+        match self.take() {
+            Some(v) if v.is_float() => Self::put_val(v, rhs),
+                _ => Self::none()
         }
-        let v = self.valop.take().unwrap();
-        if v.is_float() {
-            return Self::put_val(v, rhs);
-        }
-        return Self::none();
     }
 
     /// Implement for << bool.
     fn put_bool(&mut self, rhs: bool) -> Self {
-        if self.valop.is_none() {
-            return Self::none();
+        match self.take() {
+            Some(v) if v.is_bool() => Self::put_val(v, rhs),
+                _ => Self::none()
         }
-        let v = self.valop.take().unwrap();
-        if v.is_bool() {
-            return Self::put_val(v, rhs);
-        }
-        return Self::none();
     }
 
     /// Implment for table << (key, val) pair.
-    fn push_table<K: ToString, T>(&mut self, key: K, val: T) -> Self
-    where Value: From<T>
+    fn push_table<K: ToString, T>(&mut self, key: K, val: T) -> Self where
+        Value: From<T>
     {
-        if self.valop.is_none() {
-            return Self::none();
+        match self.take() {
+            Some(v) if v.is_table() => {
+                v.as_table_mut().unwrap().insert(key.to_string(), Value::from(val));
+                Self::path(v)
+            }
+            _ => Self::none()
         }
-        let v = self.valop.take().unwrap();
-        if v.is_table() {
-            v.as_table_mut().unwrap().insert(key.to_string(), Value::from(val));
-            return Self::path(v);
-        }
-        return Self::none();
     }
 
     /// Implment for array << (val, ) << [item] .
-    fn push_array<T>(&mut self, val: T) -> Self
-    where Value: From<T>
+    fn push_array<T>(&mut self, val: T) -> Self where
+        Value: From<T>
     {
-        if self.valop.is_none() {
-            return Self::none();
+        match self.take() {
+            Some(v) if v.is_array() => {
+                v.as_array_mut().unwrap().push(Value::from(val));
+                Self::path(v)
+            }
+            _ => Self::none()
         }
-        let v = self.valop.take().unwrap();
-        if v.is_array() {
-            v.as_array_mut().unwrap().push(Value::from(val));
-            return Self::path(v);
-        }
-        return Self::none();
     }
 }
 
@@ -455,7 +448,7 @@ impl<'tr> TomlPtrMut<'tr> {
 impl<'tr> Not for TomlPtrMut<'tr> {
     type Output = bool;
     fn not(self) -> Self::Output {
-        self.valop.is_none()
+        self.is_none()
     }
 }
 
@@ -493,62 +486,40 @@ where Rhs: PathBuilder + Index + Copy
 impl<'tr> BitOr<String> for TomlPtrMut<'tr>
 {
     type Output = String;
-    fn bitor(self, rhs: String) -> Self::Output {
-        if self.valop.is_none() {
-            return rhs;
-        }
-        match self.valop.unwrap().as_str() {
-            Some(s) => s.to_string(),
-            None => rhs
-        }
+    fn bitor(mut self, rhs: String) -> Self::Output {
+        self.immut().bitor(rhs)
     }
 }
 
 /// Pipe operator `|` with string literal, to get string value or `rhs` as default.
-impl<'tr> BitOr<&'static str> for TomlPtrMut<'tr>
-{
+impl<'tr> BitOr<&'static str> for TomlPtrMut<'tr> {
     type Output = &'tr str;
-    fn bitor(self, rhs: &'static str) -> Self::Output {
-        match self.valop {
-            Some(v) => v.as_str().unwrap_or(rhs),
-            None => rhs,
-        }
+    fn bitor(mut self, rhs: &'static str) -> Self::Output {
+        self.immut().bitor(rhs)
     }
 }
 
 /// Pipe operator to get integer value or `rhs` as default.
-impl<'tr> BitOr<i64> for TomlPtrMut<'tr>
-{
+impl<'tr> BitOr<i64> for TomlPtrMut<'tr> {
     type Output = i64;
-    fn bitor(self, rhs: i64) -> Self::Output {
-        match self.valop {
-            Some(v) => v.as_integer().unwrap_or(rhs),
-            None => rhs,
-        }
+    fn bitor(mut self, rhs: i64) -> Self::Output {
+        self.immut().bitor(rhs)
     }
 }
 
 /// Pipe operator to get float value or `rhs` as default.
-impl<'tr> BitOr<f64> for TomlPtrMut<'tr>
-{
+impl<'tr> BitOr<f64> for TomlPtrMut<'tr> {
     type Output = f64;
-    fn bitor(self, rhs: f64) -> Self::Output {
-        match self.valop {
-            Some(v) => v.as_float().unwrap_or(rhs),
-            None => rhs,
-        }
+    fn bitor(mut self, rhs: f64) -> Self::Output {
+        self.immut().bitor(rhs)
     }
 }
 
 /// Pipe operator to get bool value or `rhs` as default.
-impl<'tr> BitOr<bool> for TomlPtrMut<'tr>
-{
+impl<'tr> BitOr<bool> for TomlPtrMut<'tr> {
     type Output = bool;
-    fn bitor(self, rhs: bool) -> Self::Output {
-        match self.valop {
-            Some(v) => v.as_bool().unwrap_or(rhs),
-            None => rhs,
-        }
+    fn bitor(mut self, rhs: bool) -> Self::Output {
+        self.immut().bitor(rhs)
     }
 }
 
